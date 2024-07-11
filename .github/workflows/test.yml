@@ -1,0 +1,60 @@
+name: Test Workflow
+on: [push]
+
+jobs:
+  set-variable-job:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        value: [value1, value2, value3]
+    outputs:
+      my_var: ${{ steps.set-env.outputs.my_var }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set environment variable
+        id: set-env
+        run: |
+          echo "MY_VAR=${{ matrix.value }}" >> $GITHUB_ENV
+          echo "my_var=${{ matrix.value }}" >> $GITHUB_ENV
+          echo "MY_VAR=${{ matrix.value }}"
+        # Capture the value in an output variable
+        # echo "::set-output name=my_var::${{ matrix.value }}"
+
+      - name: Save GITHUB_ENV as artifact
+        run: |
+          cp $GITHUB_ENV ./env_file
+        uses: actions/upload-artifact@v2
+        with:
+          name: env_file_${{ matrix.value }}
+          path: ./env_file
+
+  use-variable-job:
+    needs: set-variable-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: env_file_${{ matrix.value }}
+          path: ./downloaded_env_files
+
+      - name: Print GITHUB_ENV contents
+        run: cat ./downloaded_env_files/env_file
+
+      - name: Read and echo environment variable
+        run: |
+          values=("value1" "value2" "value3")
+          for value in "${values[@]}"; do
+            var_value="${{ needs.set-variable-job.outputs.my_var }}"
+            if [ "$var_value" == "$value" ]; then
+              echo "result: $var_value"
+            else
+              echo "Error: MY_VAR is not set correctly"
+              exit 1
+            fi
+          done
